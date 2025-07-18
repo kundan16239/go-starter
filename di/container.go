@@ -11,8 +11,10 @@ import (
 	"github.com/ThreeDotsLabs/watermill-amqp/v3/pkg/amqp"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/gin-gonic/gin"
+	"github.com/go-playground/validator/v10"
 	"github.com/joho/godotenv"
 
+	"project-structure/internal/order"
 	"project-structure/internal/user"
 	"project-structure/pkg/db"
 	"project-structure/pkg/shared/logger"
@@ -41,20 +43,26 @@ func InitializeApp() (*App, func(), error) {
 		_ = client.Disconnect(context.Background())
 	}
 
+	validate := validator.New()
+
 	router := gin.Default()
 	router.Use(gin.Logger(), gin.Recovery())
 
 	// Repositories
 	userRepo := user.NewMongoRepository(mongoDB)
+	orderRepo := order.NewMongoRepository(mongoDB)
 
 	// Services
 	userService := user.NewService(userRepo)
+	orderService := order.NewService(orderRepo)
 
 	// Handlers
 	userHandler := user.NewHandler(userService, log)
+	orderHandler := order.NewHandler(validate, log, orderService)
 
 	// Router
 	userHandler.RegisterRoutes(router)
+	orderHandler.RegisterRoutes(router)
 
 	router.GET("/healthz", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "alive", "time": time.Now().UTC()})

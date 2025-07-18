@@ -162,8 +162,7 @@ func (r *MongoRepository) List(ctx context.Context, page, limit int) ([]*User, i
 	// Set up options for pagination and sorting
 	findOptions := options.Find().
 		SetSkip(int64(skip)).
-		SetLimit(int64(limit)).
-		SetSort(bson.D{{"created_at", -1}})
+		SetLimit(int64(limit))
 
 	// Execute query
 	documents, err := r.BaseRepository.GetAll(ctx, bson.M{}, findOptions)
