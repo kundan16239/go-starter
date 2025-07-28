@@ -9,12 +9,19 @@ if [ -z "$DOMAIN" ]; then
   exit 1
 fi
 
+# Capitalize first letter for struct name
 CAP_DOMAIN="$(tr '[:lower:]' '[:upper:]' <<< ${DOMAIN:0:1})${DOMAIN:1}"
+
+# Package name must be lowercase
+PKG_DOMAIN="$(echo "$DOMAIN" | tr '[:upper:]' '[:lower:]')"
+
+# UpperCamelCase for constructor naming (e.g., userComment => UserComment)
+PASCAL_CASE_DOMAIN="$(tr '[:lower:]' '[:upper:]' <<< ${DOMAIN:0:1})${DOMAIN:1}"
 
 mkdir -p internal/$DOMAIN
 
 # 1. model.go
-cat > internal/$DOMAIN/model.go <<EOF
+cat > internal/$DOMAIN/${DOMAIN}Model.go <<EOF
 package $DOMAIN
 
 import "go.mongodb.org/mongo-driver/bson/primitive"
@@ -33,7 +40,7 @@ func (o *${CAP_DOMAIN}) ToResponse() ${CAP_DOMAIN}Response {
 EOF
 
 # 2. dto.go
-cat > internal/$DOMAIN/dto.go <<EOF
+cat > internal/$DOMAIN/${DOMAIN}Dto.go <<EOF
 package $DOMAIN
 
 type Create${CAP_DOMAIN}Request struct {
@@ -55,27 +62,8 @@ type ${CAP_DOMAIN}ListResponse struct {
 }
 EOF
 
-# 3. repository.go (interface)
-cat > internal/$DOMAIN/repository.go <<EOF
-package $DOMAIN
-
-import (
-    "context"
-    "go.mongodb.org/mongo-driver/bson/primitive"
-    "go.mongodb.org/mongo-driver/mongo/options"
-)
-
-type Repository interface {
-    Create(ctx context.Context, entity *${CAP_DOMAIN}) error
-    GetByID(ctx context.Context, id primitive.ObjectID) (*${CAP_DOMAIN}, error)
-    Update(ctx context.Context, entity *${CAP_DOMAIN}) error
-    Delete(ctx context.Context, id primitive.ObjectID) error
-    List(ctx context.Context, skip, limit int64, findOptions *options.FindOptions) ([]*${CAP_DOMAIN}, int64, error)
-}
-EOF
-
-# 4. repository_mongo.go (implementation)
-cat > internal/$DOMAIN/repository_mongo.go <<EOF
+# 3. repository.go (implementation)
+cat > internal/$DOMAIN/${DOMAIN}Repository.go <<EOF
 package $DOMAIN
 
 import (
@@ -89,11 +77,19 @@ import (
     "project-structure/pkg/shared/repository"
 )
 
+type Repository interface {
+    Create(ctx context.Context, entity *${CAP_DOMAIN}) error
+    GetByID(ctx context.Context, id primitive.ObjectID) (*${CAP_DOMAIN}, error)
+    Update(ctx context.Context, entity *${CAP_DOMAIN}) error
+    Delete(ctx context.Context, id primitive.ObjectID) error
+    List(ctx context.Context, skip, limit int64, findOptions *options.FindOptions) ([]*${CAP_DOMAIN}, int64, error)
+}
+
 type MongoRepository struct {
     *repository.BaseRepository
 }
 
-func NewMongoRepository(db *mongo.Database) Repository {
+func New${PASCAL_CASE_DOMAIN}Repository(db *mongo.Database) Repository {
     return &MongoRepository{
         BaseRepository: repository.NewBaseRepository(db, "${DOMAIN}s"),
     }
@@ -177,8 +173,8 @@ func (r *MongoRepository) List(ctx context.Context, skip, limit int64, findOptio
 }
 EOF
 
-# 5. service.go
-cat > internal/$DOMAIN/service.go <<EOF
+# 4. service.go
+cat > internal/$DOMAIN/${DOMAIN}Service.go <<EOF
 package $DOMAIN
 
 import (
@@ -192,7 +188,7 @@ type Service struct {
     repo Repository
 }
 
-func NewService(repo Repository) *Service {
+func New${PASCAL_CASE_DOMAIN}Service(repo Repository) *Service {
     return &Service{repo: repo}
 }
 
@@ -265,8 +261,8 @@ func (s *Service) List${CAP_DOMAIN}s(ctx context.Context, skip, limit int64) (*$
 }
 EOF
 
-# 6. handler.go
-cat > internal/$DOMAIN/handler.go <<EOF
+# 5. handler.go
+cat > internal/$DOMAIN/${DOMAIN}Handler.go <<EOF
 package $DOMAIN
 
 import (
@@ -286,7 +282,7 @@ type Handler struct {
 	service  *Service
 }
 
-func NewHandler(validate *validator.Validate, logger logger.Logger, service *Service) *Handler {
+func New${PASCAL_CASE_DOMAIN}Handler(validate *validator.Validate, logger logger.Logger, service *Service) *Handler {
 	return &Handler{validate: validate, logger: logger, service: service}
 }
 
@@ -393,12 +389,12 @@ func (h *Handler) List${CAP_DOMAIN}s(c *gin.Context) {
 EOF
 
 # 7. routes.go
-cat > internal/$DOMAIN/routes.go <<EOF
+cat > internal/$DOMAIN/${DOMAIN}Routes.go <<EOF
 package $DOMAIN
 
 import "github.com/gin-gonic/gin"
 
-func (h *Handler) RegisterRoutes(router *gin.Engine) {
+func (h *Handler) Register${PASCAL_CASE_DOMAIN}Routes(router *gin.Engine) {
     group := router.Group("/${DOMAIN}s")
     {
         group.POST("", h.Create${CAP_DOMAIN})
@@ -412,28 +408,75 @@ EOF
 
 # 8. Insert into di/container.go
 # Import
-sed -i '' "/import (/a\\
-	\"project-structure/internal/$DOMAIN\"\
-" di/container.go
+# sed -i '' "/import (/a\\
+# 	\"project-structure/internal/$DOMAIN\"\
+# " di/container.go
 
-# Repository
-sed -i '' "/userRepo :=/a\\
-	${DOMAIN}Repo := $DOMAIN.NewMongoRepository(mongoDB)\
-" di/container.go
+# # Repository
+# sed -i '' "/userRepo :=/a\\
+# 	${DOMAIN}Repo := $DOMAIN.NewMongoRepository(mongoDB)\
+# " di/container.go
 
-# Service
-sed -i '' "/userService :=/a\\
-	${DOMAIN}Service := $DOMAIN.NewService(${DOMAIN}Repo)\
-" di/container.go
+# # Service
+# sed -i '' "/userService :=/a\\
+# 	${DOMAIN}Service := $DOMAIN.NewService(${DOMAIN}Repo)\
+# " di/container.go
 
-# Handler
-sed -i '' "/userHandler :=/a\\
-	${DOMAIN}Handler := $DOMAIN.NewHandler(validate, log, ${DOMAIN}Service)\
-" di/container.go
+# # Handler
+# sed -i '' "/userHandler :=/a\\
+# 	${DOMAIN}Handler := $DOMAIN.NewHandler(validate, log, ${DOMAIN}Service)\
+# " di/container.go
 
-# Register routes
-sed -i '' "/userHandler.RegisterRoutes(router)/a\\
-	${DOMAIN}Handler.RegisterRoutes(router)\
-" di/container.go
+# # Register routes
+# sed -i '' "/userHandler.RegisterRoutes(router)/a\\
+# 	${DOMAIN}Handler.RegisterRoutes(router)\
+# " di/container.go
+FILE="di/container.go"
+
+awk -v domain="$DOMAIN" -v Domain="$PASCAL_CASE_DOMAIN" '
+BEGIN {
+  importInserted = 0
+  repoInserted = 0
+  serviceInserted = 0
+  handlerInserted = 0
+  routeInserted = 0
+}
+
+{
+  print
+
+  # Import line
+  if (!importInserted && $0 ~ /^import \($/) {
+    print "\t\"project-structure/internal/" domain "\""
+    importInserted = 1
+  }
+
+  # Repository line
+  if (!repoInserted && $0 ~ /\.New.*Repository\(/) {
+    print "\t" domain "Repo := " domain ".New" Domain "Repository(mongoDB)"
+    repoInserted = 1
+  }
+
+  # Service line
+  if (!serviceInserted && $0 ~ /\.New.*Service\(/) {
+    print "\t" domain "Service := " domain ".New" Domain "Service(" domain "Repo)"
+    serviceInserted = 1
+  }
+
+  # Handler line
+  if (!handlerInserted && $0 ~ /\.New.*Handler\(/) {
+    print "\t" domain "Handler := " domain ".New" Domain "Handler(validate, log, " domain "Service)"
+    handlerInserted = 1
+  }
+
+  # Route registration
+  if (!routeInserted && $0 ~ /\.RegisterRoutes\(router\)/) {
+    print "\t" domain "Handler.RegisterRoutes(router)"
+    routeInserted = 1
+  }
+}
+
+' "$FILE" > "$FILE.tmp" && mv "$FILE.tmp" "$FILE"
+
 
 echo "Scaffolded CRUD and DI for domain: $DOMAIN" 
