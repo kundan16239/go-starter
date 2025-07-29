@@ -394,7 +394,7 @@ package $DOMAIN
 
 import "github.com/gin-gonic/gin"
 
-func (h *Handler) Register${PASCAL_CASE_DOMAIN}Routes(router *gin.Engine) {
+func (h *Handler) RegisterRoutes(router *gin.Engine) {
     group := router.Group("/${DOMAIN}s")
     {
         group.POST("", h.Create${CAP_DOMAIN})
